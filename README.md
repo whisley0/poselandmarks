@@ -1,4 +1,4 @@
-#this is an app to test the functionality of the google mediapipe plugin on a mobile device
+# this is an app to test the functionality of the google mediapipe plugin on a mobile device
 
 This is the step to follow in order to make it work on your machine:
 
@@ -11,7 +11,7 @@ This is the step to follow in order to make it work on your machine:
 6. After the dependencies are installed, key in "npx expo install --check" to make sure all dependencies version are up to date, if there is any suggestion of installing, just install it.
 7. Depending on the testing platform, you may need to connect your phone to your computer, in this tutorial, I am using android phone.
 8. Go to android folder in terminal, key in ./gradlew clean to clean slate the android build
-9. ##Attention
+9. ## Attention
     There is a known bug in the vision-camera and skia that would stop the android phone from displaying the camera vision on screen. In order to patch it, we need to go to node_modules folder, at line 89 of node_modules/react-native-vision-camera/src/useSkiaFrameProcessor.ts, replacing the content inside the try into the followings(excluding try {}):
 
    try {
