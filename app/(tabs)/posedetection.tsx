@@ -1,10 +1,11 @@
 // For JS/TS
-import { PaintStyle, Skia } from "@shopify/react-native-skia";
-import React, { useEffect } from 'react';
+import { matchFont, PaintStyle, Skia, Text } from "@shopify/react-native-skia";
+import React, { useEffect, useState } from 'react';
 import {
   NativeEventEmitter,
   NativeModules,
-  Platform, StyleSheet, Text
+  Platform,
+  StyleSheet
 } from 'react-native';
 import {
   Camera,
@@ -55,6 +56,13 @@ const lines = [
   [31, 27]
 ];
 
+const test_angles = [
+  [12, 14, 16], // left elbow
+  [11, 13, 15], // right elbow
+  [24, 26, 28], // left knee
+  [23, 25, 27], // right knee
+];
+
 const { PoseDetection } = NativeModules;
 
 const poseLandmarksEmitter = new NativeEventEmitter(PoseDetection);
@@ -76,12 +84,46 @@ export function poseLandmarks(frame: Frame) {
    return poseLandMarkPlugin.call(frame)
 }
 
+function findAngleAtPointB(A, B, C) {
+  console.log(`coordinate of B: ${B.x}, ${B.y}`);
+  const angleBA = Math.atan2(A.y - B.y, A.x - B.x);
+  const angleBC = Math.atan2(C.y - B.y, C.x - B.x);
+  let angle = angleBC - angleBA;
+
+  // Normalize angle to be within -PI to PI
+  if (angle > Math.PI) angle -= 2 * Math.PI;
+  if (angle < -Math.PI) angle += 2 * Math.PI;
+
+  return angle; // Angle in radians
+}
+
 //main application
 function PoseCameraDemo(): React.JSX.Element{
 
+  const fontFamily = Platform.select({ ios: "Helvetica", default: "serif" });
+  const fontStyle = {
+    fontFamily,
+    fontSize: 14,
+    fontStyle: "italic",
+    fontWeight: "bold",
+  };
+  const font = matchFont(fontStyle);
+
   const landmarks = useSharedValue({});
+  const anglevalues = useSharedValue<number[]>([]); // Initialize with an empty array or an existing one
   const device = useCameraDevice('back');
   const { hasPermission, requestPermission } = useCameraPermission();
+  
+  // initialize initial position 
+  const initialPosition = 'up'
+  const [position, setPosition] = useState(initialPosition);
+  
+  // Initialize count and updateCount using useState
+  const initialCount = 0
+  const [count, setCount] = useState(initialCount);
+  const up_angle = 180
+  const down_angle = 90;
+  const error = 10; // error margin for angle detection
 
   const paint = Skia.Paint();
   paint.setStyle(PaintStyle.Fill);
@@ -90,7 +132,7 @@ function PoseCameraDemo(): React.JSX.Element{
 
   const linePaint = Skia.Paint();
   linePaint.setStyle(PaintStyle.Fill);
-  linePaint.setStrokeWidth(4);
+  linePaint.setStrokeWidth(2);
   linePaint.setColor(Skia.Color('lime'));
 
   useEffect(() => {
@@ -105,19 +147,33 @@ function PoseCameraDemo(): React.JSX.Element{
         } else {
           landmarks.value = {};
         }
-        /*
-          The event contains values for landmarks and hand.
-          These values are defined in the HandLandmarkerResultProcessor class
-          found in the HandLandmarks.swift file.
-        */
-        console.log("onPoseLandmarksDetected: ", event);
+        
+        console.log("onPoseLandmarksDetected: ", event.landmarks);
 
         /*
           This is where you can handle converting the data into commands
           for further processing.
         */
+        if (event.landmarks.length) {
+          const person = event.landmarks[0]
+          const angle_list = [];
 
-        console.log('data II:', landmarks.value);
+          for (const [A, B, C] of test_angles) {
+            // A, B, C are indices of the landmarks
+            const pointA = { x: person[A].x, y: person[A].y };
+            const pointB = { x: person[B].x, y: person[B].y };
+            const pointC = { x: person[C].x, y: person[C].y };
+
+            const angleRad = findAngleAtPointB(pointA, pointB, pointC);
+            const angleDeg = (angleRad * 180) / Math.PI;
+            console.log(`Angle at B: ${angleDeg} degrees`);
+            angle_list.push(angleDeg);
+          }
+          console.log('Angles list:', angle_list);
+          anglevalues.value = angle_list; // Update the shared value with the angles
+          //console.log('Angles shared value variable:', anglevalues.value);
+
+        } 
 
       },
     );
@@ -145,7 +201,7 @@ function PoseCameraDemo(): React.JSX.Element{
 
     // Print a simple message
     //console.log('MyComponent rendered!');
-    console.log('data 3.0:', landmarks.value);   
+    //console.log('data 3.0:', landmarks.value);   
 
     /* 
       Paint landmarks on the screen.
@@ -155,6 +211,7 @@ function PoseCameraDemo(): React.JSX.Element{
   
     if (landmarks.value[0]) {
       const hand = landmarks.value[0];
+      const keyAngles = anglevalues.value;
       
       const frameWidth = frame.width;
       const frameHeight = frame.height;
@@ -179,6 +236,50 @@ function PoseCameraDemo(): React.JSX.Element{
           paint,
         );
       }
+
+      //console.log(`key Angles: ${keyAngles}`);
+
+      // Draw angles at specified points
+      if (font && keyAngles.length !== 0) {
+        for (const [A, B, C] of test_angles) {
+          const angle = keyAngles.shift()
+          if (angle === undefined) {
+            console.warn("Angle is undefined for one of the landmarks.");
+          } else {
+          console.log(`Printed Angles: ${angle} on landmark ${B}`);
+          frame.drawText(
+            angle.toString(),
+            hand[B].x * Number(frameWidth),
+            hand[B].y * Number(frameHeight),
+            paint,
+            font
+            ); 
+          }
+        }
+      } else if (font == null) {
+          console.warn("Font is not loaded.");
+      } else if (keyAngles.length === 0) {
+          console.warn("keyAngles is undefined.");
+      }
+      
+      //logic
+      //1. if previous state is up
+      if (position === 'up') {
+        //2. if angle is less than down_angle
+        if (anglevalues.value[0] < down_angle + error && anglevalues.value[0] > down_angle - error) {
+          //3. change position to down
+          setPosition('down');
+          //4. increment count
+          setCount(count + 1);
+        }
+      } else if (position === 'down') {
+        //5. if angle is greater than up_angle
+        if (anglevalues.value[0] > up_angle - error && anglevalues.value[0] < up_angle + error) {
+        //6. change position to up
+          setPosition('up');
+        }
+      }
+
     }
 
   }, []);
@@ -202,11 +303,12 @@ function PoseCameraDemo(): React.JSX.Element{
       isActive={true}
       frameProcessor={frameProcessor}
       pixelFormat={pixelFormat}
+      outputOrientation = "device"
     />
   );
 
 }
 
-
+const styles = StyleSheet.create({})
 
 export default PoseCameraDemo;

@@ -1,6 +1,6 @@
 // For JS/TS
-import { PaintStyle, Skia } from "@shopify/react-native-skia";
-import React, { useEffect } from 'react';
+import { matchFont, PaintStyle, Skia } from "@shopify/react-native-skia";
+import React, { useEffect, useState } from 'react';
 import {
   NativeEventEmitter,
   NativeModules,
@@ -14,7 +14,7 @@ import {
   useSkiaFrameProcessor,
   VisionCameraProxy
 } from 'react-native-vision-camera';
-import { useSharedValue } from 'react-native-worklets-core';
+import { useRunOnJS, useSharedValue } from 'react-native-worklets-core';
 
 //initialize key variables
 const lines = [
@@ -63,12 +63,49 @@ export function handLandmarks(frame: Frame) {
    return handLandMarkPlugin.call(frame)
 }
 
+
 //main application
 function HandCameraDemo(): React.JSX.Element{
 
   const landmarks = useSharedValue({});
-  const device = useCameraDevice('back');
+  const device = useCameraDevice('front');
   const { hasPermission, requestPermission } = useCameraPermission();
+
+  // Initialize count and updateCount using useState
+  const initialCount = 0
+  const [count, setCount] = useState(initialCount);
+
+   // Function to run on the JS thread
+   const updateCount = useRunOnJS((plusone) => {
+    console.log('set state to', plusone);
+    setCount(prevCount => prevCount + plusone);
+  }, []);
+  
+  // initialize initial position 
+  const initialPosition = 'open'
+  const closePosition = 'close'
+  const [position, setPosition] = useState(initialPosition);
+
+  // Function to run on the JS thread
+  const updatePosition = useRunOnJS((result) => {
+    console.log('set state to', result);
+    setPosition(result);
+  }, []);
+
+  useEffect(() => {
+    // This code runs after 'count' has been updated and the component re-rendered
+    console.warn('State updated:', position);
+    console.warn('Count updated:', count);
+  }, [position, count]); // Dependency array: effect runs when 'position' changes
+
+  const fontFamily = Platform.select({ ios: "Helvetica", default: "serif" });
+  const fontStyle = {
+      fontFamily,
+      fontSize: 64,
+      fontStyle: "italic",
+      fontWeight: "bold",
+    };
+  const font = matchFont(fontStyle);
 
   const paint = Skia.Paint();
   paint.setStyle(PaintStyle.Fill);
@@ -104,7 +141,7 @@ function HandCameraDemo(): React.JSX.Element{
           for further processing.
         */
 
-        console.log('data II:', landmarks.value);
+        //console.log('data II:', landmarks.value);
 
       },
     );
@@ -132,7 +169,7 @@ function HandCameraDemo(): React.JSX.Element{
 
     // Print a simple message
     //console.log('MyComponent rendered!');
-    console.log('data 3.0:', landmarks.value);   
+    //console.log('data 3.0:', landmarks.value);   
 
     /* 
       Paint landmarks on the screen.
@@ -166,9 +203,49 @@ function HandCameraDemo(): React.JSX.Element{
           paint,
         );
       }
+
+      //find distance between thump tips and index finger tips
+      //console.log('hand[4]', hand[4].x, hand[4].y)
+      //console.log('hand[8]', hand[8].x, hand[8].y)  
+      //distance formula
+      const distance = Math.hypot(hand[4].x - hand[8].x, hand[4].y - hand[8].y)
+      console.log('distance', distance.toFixed(5))
+      console.log('position', position)
+
+      // Draw text with the current count
+      //logic
+      //1. if previous state is up
+      if (position === 'open') {
+        //2. if angle is less than down_angle
+        if (distance < 0.03) {
+          //3. change position to down\
+          //4. increment count
+          updateCount(1);
+          //runOnJS(countup)(count)
+          updatePosition(closePosition)
+        }
+      } else if (position === 'close') {
+        //5. if angle is greater than up_angle
+        if (distance > 0.03) {
+        //6. change position to up
+        updatePosition(initialPosition)
+        
+        }
+      }
+        
+      
+
     }
 
-  }, []);
+    frame.drawText(
+      count.toString(),
+      2/3 * Number(frame.width),
+      2/3 * Number(frame.height),
+      paint,
+      font
+      ); 
+
+  }, [count, position]);
 
   if (!hasPermission) {
     // Display message if camera permission is not granted
