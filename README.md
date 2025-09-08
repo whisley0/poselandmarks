@@ -12,7 +12,7 @@ This is the step to follow in order to make it work on your machine:
 7. Depending on the testing platform, you may need to connect your phone to your computer, in this tutorial, I am using android phone.
 8. Go to android folder in terminal, key in ./gradlew clean to clean slate the android build
 9. ## Attention
-    There is a known bug in the vision-camera and skia that would stop the android phone from displaying the camera vision on screen. In order to patch it, we need to go to node_modules folder, at line 89 of node_modules/react-native-vision-camera/src/useSkiaFrameProcessor.ts, replacing the content inside the try into the followings(excluding try {}):
+    There is a known bug in the vision-camera and skia that would stop the android phone from displaying the camera vision on screen. In order to patch it, we need to go to node_modules folder, at line 89 of node_modules/react-native-vision-camera/src/skia/useSkiaFrameProcessor.ts, replacing the content inside the try into the followings(excluding try {}):
 
    try {
     // 2. properly rotate canvas so Frame is rendered up-right.
